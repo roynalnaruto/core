@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"log"
 
@@ -57,7 +58,7 @@ func (app *TerraApp) prepForZeroHeightGenesis(ctx sdk.Context, jailWhiteList []s
 	}
 
 	/* Just to be safe, assert the invariants on current state. */
-	app.crisisKeeper.AssertInvariants(ctx)
+	// app.crisisKeeper.AssertInvariants(ctx)
 
 	/* Handle fee distribution state. */
 
@@ -67,11 +68,16 @@ func (app *TerraApp) prepForZeroHeightGenesis(ctx sdk.Context, jailWhiteList []s
 		return false
 	})
 
+	removeBlacklistAddrs := make(map[string]bool)
 	// withdraw all delegator rewards
 	dels := app.stakingKeeper.GetAllDelegations(ctx)
 	for _, delegation := range dels {
 		_, _ = app.distrKeeper.WithdrawDelegationRewards(ctx, delegation.DelegatorAddress, delegation.ValidatorAddress)
+		removeBlacklistAddrs[base64.StdEncoding.EncodeToString(delegation.DelegatorAddress)] = true
 	}
+
+	// set remove blacklist addr
+	app.genaccKeeper.SetRemoveBlacklistAddrs(removeBlacklistAddrs)
 
 	// clear validator slash events
 	app.distrKeeper.DeleteAllValidatorSlashEvents(ctx)

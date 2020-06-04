@@ -75,19 +75,31 @@ func (AppModuleBasic) IterateGenesisAccounts(cdc *codec.Codec, appGenesis map[st
 }
 
 //___________________________
+// Keeper is to store blacklist addrs
+type Keeper struct {
+	removeBlacklistAddrs map[string]bool
+}
+
+// SetRemoveBlacklistAddrs set remove blacklist addresses to prevent
+// deleting zero balance account with delegation
+func (k *Keeper) SetRemoveBlacklistAddrs(addrs map[string]bool) {
+	k.removeBlacklistAddrs = addrs
+}
 
 // AppModule implements an application module for the genaccounts module.
 type AppModule struct {
 	AppModuleBasic
 	accountKeeper AccountKeeper
+	keeper        Keeper
 }
 
 // NewAppModule creates a new AppModule object
-func NewAppModule(accountKeeper AccountKeeper) module.AppModule {
+func NewAppModule(accountKeeper AccountKeeper, keeper Keeper) module.AppModule {
 
 	return module.NewGenesisOnlyAppModule(AppModule{
 		AppModuleBasic: AppModuleBasic{},
 		accountKeeper:  accountKeeper,
+		keeper:         keeper,
 	})
 }
 
@@ -102,6 +114,6 @@ func (am AppModule) InitGenesis(ctx sdk.Context, data json.RawMessage) []abci.Va
 // ExportGenesis returns the exported genesis state as raw bytes for the genaccounts
 // module.
 func (am AppModule) ExportGenesis(ctx sdk.Context) json.RawMessage {
-	gs := ExportGenesis(ctx, am.accountKeeper)
+	gs := ExportGenesis(ctx, am.accountKeeper, am.keeper.removeBlacklistAddrs)
 	return moduleCdc.MustMarshalJSON(gs)
 }

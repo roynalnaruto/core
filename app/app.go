@@ -112,6 +112,7 @@ type TerraApp struct {
 	paramsKeeper   params.Keeper
 	marketKeeper   market.Keeper
 	treasuryKeeper treasury.Keeper
+	genaccKeeper   genaccounts.Keeper
 
 	// the module manager
 	mm *module.Manager
@@ -176,6 +177,7 @@ func NewTerraApp(logger log.Logger, db dbm.DB, traceStore io.Writer, loadLatest 
 	app.treasuryKeeper = treasury.NewKeeper(app.cdc, keys[treasury.StoreKey], treasurySubspace,
 		app.supplyKeeper, app.marketKeeper, &stakingKeeper, app.distrKeeper,
 		oracle.ModuleName, distr.ModuleName, treasury.DefaultCodespace)
+	app.genaccKeeper = genaccounts.Keeper{}
 
 	// register the proposal types
 	govRouter := gov.NewRouter()
@@ -192,7 +194,7 @@ func NewTerraApp(logger log.Logger, db dbm.DB, traceStore io.Writer, loadLatest 
 		staking.NewMultiStakingHooks(app.distrKeeper.Hooks(), app.slashingKeeper.Hooks()))
 
 	app.mm = module.NewManager(
-		genaccounts.NewAppModule(app.accountKeeper),
+		genaccounts.NewAppModule(app.accountKeeper, app.genaccKeeper),
 		genutil.NewAppModule(app.accountKeeper, app.stakingKeeper, app.BaseApp.DeliverTx),
 		auth.NewAppModule(app.accountKeeper),
 		bank.NewAppModule(app.bankKeeper, app.accountKeeper),

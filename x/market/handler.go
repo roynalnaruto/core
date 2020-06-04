@@ -1,7 +1,6 @@
 package market
 
 import (
-	"fmt"
 	"reflect"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -81,7 +80,6 @@ func handleMsgSwap(ctx sdk.Context, k Keeper, ms MsgSwap) sdk.Result {
 		return sendErr.Result()
 	}
 
-	fmt.Println(retCoin.String(), swapFee.String())
 	ctx.EventManager().EmitEvents(sdk.Events{
 		sdk.NewEvent(
 			types.EventSwap,

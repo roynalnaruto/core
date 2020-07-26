@@ -199,7 +199,7 @@ func (app *TerraApp) exportRanking(ctx sdk.Context, accs ExportAccounts, denom s
 	// sort descending order
 	sort.Sort(accs)
 
-	err := ioutil.WriteFile(fmt.Sprintf("/tmp/tracking-%s-%s.json", denom, time.Now().Format(time.RFC3339)), []byte(accs.String()), 0644)
+	err := ioutil.WriteFile(fmt.Sprintf("/tmp/tracking-%s-%s.txt", denom, time.Now().Format(time.RFC3339)), []byte(accs.String()), 0644)
 	if err != nil {
 		app.Logger().Error(err.Error())
 	}

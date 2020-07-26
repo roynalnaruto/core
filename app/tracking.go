@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"io/ioutil"
+	"sort"
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/codec"
@@ -106,14 +107,16 @@ func (app *TerraApp) trackingAll(ctx sdk.Context) {
 
 	// Minimum coins to be included in tracking
 	minCoins := sdk.Coins{}
+	accsPerDenom := map[string]ExportAccounts{}
 	for _, denom := range denoms {
 		minCoins = append(minCoins, sdk.NewCoin(denom, sdk.OneInt().MulRaw(core.MicroUnit)))
+		accsPerDenom[denom] = ExportAccounts{}
 	}
 
 	minCoins = minCoins.Sort()
-
-	accs := []authexported.Account{}
 	vestingCoins := sdk.NewCoins()
+
+	app.Logger().Info("Start Tracking Load Account")
 	app.accountKeeper.IterateAccounts(ctx, func(acc authexported.Account) bool {
 
 		// Skip module accounts from tracking
@@ -158,15 +161,21 @@ func (app *TerraApp) trackingAll(ctx sdk.Context) {
 		}
 
 		// Check minimum coins
-		if acc.GetCoins().IsAnyGTE(minCoins) {
-			accs = append(accs, acc)
+		for _, denom := range denoms {
+			if amt := acc.GetCoins().AmountOf(denom); amt.GTE(sdk.NewInt(core.MicroUnit)) {
+				accsPerDenom[denom] = append(accsPerDenom[denom], NewExportAccount(acc.GetAddress(), amt))
+			}
 		}
 
 		return false
 	})
 
+	app.Logger().Info("End Tracking Load Account")
+
 	go app.exportVestingSupply(ctx, vestingCoins)
-	go app.exportRanking(ctx, accs, denoms)
+	for _, denom := range denoms {
+		go app.exportRanking(ctx, accsPerDenom[denom], denom)
+	}
 
 }
 
@@ -184,6 +193,20 @@ func (app *TerraApp) exportVestingSupply(ctx sdk.Context, vestingCoins sdk.Coins
 	app.Logger().Info("End Tracking Vesting Luna Supply")
 }
 
+func (app *TerraApp) exportRanking(ctx sdk.Context, accs ExportAccounts, denom string) {
+	app.Logger().Info(fmt.Sprintf("Start Wallet Balance Tracking for %s", denom))
+
+	// sort descending order
+	sort.Sort(accs)
+
+	err := ioutil.WriteFile(fmt.Sprintf("/tmp/tracking-%s-%s.json", denom, time.Now().Format(time.RFC3339)), []byte(accs.String()), 0644)
+	if err != nil {
+		app.Logger().Error(err.Error())
+	}
+
+	app.Logger().Info(fmt.Sprintf("End Wallet Balance Tracking for %s", denom))
+}
+
 // ExportAccount is ranking export account format
 type ExportAccount struct {
 	Address sdk.AccAddress `json:"address"`
@@ -198,53 +221,32 @@ func NewExportAccount(address sdk.AccAddress, amount sdk.Int) ExportAccount {
 	}
 }
 
-func (app *TerraApp) exportRanking(ctx sdk.Context, accs []auth.Account, denoms []string) {
-	app.Logger().Info("Start Tracking Top 1000 Rankers")
+// String - implement stringifier interface
+func (acc ExportAccount) String() (out string) {
+	return fmt.Sprintf("%s,%s", acc.Address, acc.Amount)
+}
 
-	maxEntries := 1000
-	if len(accs) < maxEntries {
-		maxEntries = len(accs)
+type ExportAccounts []ExportAccount
+
+// Less - implement Sort interface
+func (accs ExportAccounts) Len() int {
+	return len(accs)
+}
+
+// Less - implement Sort interface descanding order
+func (accs ExportAccounts) Less(i, j int) bool {
+	return accs[i].Amount.GT(accs[j].Amount)
+}
+
+// Less - implement Sort interface
+func (accs ExportAccounts) Swap(i, j int) { accs[i], accs[j] = accs[j], accs[i] }
+
+// String - implement stringifier interface
+func (accs ExportAccounts) String() (out string) {
+	out = ""
+	for _, a := range accs {
+		out += a.String() + "\n"
 	}
 
-	for _, denom := range denoms {
-
-		var topRankerList []ExportAccount
-
-		tmpAccs := make([]auth.Account, len(accs))
-		copy(tmpAccs, accs)
-
-		for i := 0; i < maxEntries; i++ {
-
-			var topRankerAmt sdk.Int
-			var topRankerAddr sdk.AccAddress
-			var topRankerIdx int
-
-			for idx, acc := range tmpAccs {
-				addr := acc.GetAddress()
-				amt := acc.GetCoins().AmountOf(denom)
-
-				if idx == 0 || amt.GT(topRankerAmt) {
-					topRankerIdx = idx
-					topRankerAmt = amt
-					topRankerAddr = addr
-				}
-			}
-
-			topRankerList = append(topRankerList, NewExportAccount(topRankerAddr, topRankerAmt))
-			tmpAccs[topRankerIdx] = tmpAccs[len(tmpAccs)-1]
-			tmpAccs = tmpAccs[:len(tmpAccs)-1]
-		}
-
-		bz, err := codec.MarshalJSONIndent(app.cdc, topRankerList)
-		if err != nil {
-			app.Logger().Error(err.Error())
-		}
-
-		err = ioutil.WriteFile(fmt.Sprintf("/tmp/tracking-%s-%s.json", denom, time.Now().Format(time.RFC3339)), bz, 0644)
-		if err != nil {
-			app.Logger().Error(err.Error())
-		}
-	}
-
-	app.Logger().Info("End Tracking Top 1000 Rankers")
+	return
 }
